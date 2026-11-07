@@ -75,6 +75,10 @@ jobs:
           patch -p1 < "$GITHUB_WORKSPACE/timelm_namespace_susfs.patch"
           # Baqi 3 files (cmdline.c, task_mmu.c, mount.h) ke chhote fixups
           patch -p1 < "$GITHUB_WORKSPACE/susfs_fixups.patch"
+          # BakaSU ko kernel ke andar 7 hooks chahiye (execveat, faccessat,
+          # stat, sys_read, setresuid, sys_reboot, input) — ye hath se
+          # lagaye gaye hooks hain, warna BakaSU ki apni check build rok deti hai
+          patch -p1 < "$GITHUB_WORKSPACE/timelm_bakasu_hooks.patch"
           # Tasdeeq: koi hissa rehta nahi hona chahiye
           if find . -name "*.rej" | grep -q .; then
             echo "ERROR: kuch patch hisse lagne se reh gaye:"
