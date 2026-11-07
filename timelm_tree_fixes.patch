@@ -1,0 +1,20 @@
+--- a/drivers/input/misc/qti-haptics.c
++++ b/drivers/input/misc/qti-haptics.c
+@@ -254,7 +254,7 @@
+ 		return -1;
+ 	}
+ 	pr_err("%s: input-data=%u, reg-data:%u\n", __func__, vmax_mv_test, val);
+-	return snprintf(buf, sizeof(buf), "%u\n", vmax_mv_test);
++	return snprintf(buf, PAGE_SIZE, "%u\n", vmax_mv_test);
+ }
+ 
+ static ssize_t pm8150b_vmax_registers_store(struct device *dev,
+@@ -303,7 +303,7 @@
+ 		return -1;;
+ 	}
+ 	pr_err("%s: input-data=%u, reg-data:%u, %u\n", __func__, play_rate_us_test, val[0], val[1]);
+-	return snprintf(buf, sizeof(buf), "%u\n", play_rate_us_test);
++	return snprintf(buf, PAGE_SIZE, "%u\n", play_rate_us_test);
+ }
+ 
+ static ssize_t pm8150b_freq_registers_store(struct device *dev,
