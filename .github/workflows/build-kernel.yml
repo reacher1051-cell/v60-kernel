@@ -86,6 +86,13 @@ jobs:
             exit 1
           fi
 
+      - name: Apply tree fixes (naye clang ke liye)
+        run: |
+          cd kernel
+          # Peter ki tree ke purane chhote bugs jo naya Neutron-Clang
+          # -Werror ki wajah se pakar leta hai (masalan qti-haptics)
+          patch -p1 < "$GITHUB_WORKSPACE/timelm_tree_fixes.patch"
+
       - name: Build kernel
         run: |
           cd kernel
