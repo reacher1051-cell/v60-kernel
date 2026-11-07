@@ -1,0 +1,121 @@
+# ============================================================
+# GitHub Actions workflow — LG V60 (timelm) kernel build
+# JAGAH: apne GitHub repo mein  .github/workflows/build-kernel.yml
+# CHALANA: repo > Actions tab > "Build timelm Kernel" > Run workflow
+# NATEEJA: Artifacts mein Kernel-Mukaram-timelm zip (AnyKernel3, flashable)
+# ============================================================
+name: Build timelm Kernel
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: "Root variant"
+        type: choice
+        options:
+          - bakasu_susfs
+          - plain
+        default: bakasu_susfs
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git bc bison flex libssl-dev libelf-dev \
+            build-essential curl wget zip unzip python3 lz4 cpio kmod
+
+      - name: Clone kernel source (Peter / lge-qcom-dev, lineage-24.0)
+        run: |
+          git clone --depth=1 -b lineage-24.0 \
+            https://github.com/lge-qcom-dev/android_kernel_lge_sm8250 kernel
+        # NOTE: agar kabhi Infinity X wale kernel source ka alag repo mile
+        # to sirf ye URL change hoga, baqi sab waisa hi rahega.
+
+      - name: Download Neutron-Clang
+        run: |
+          mkdir -p clang && cd clang
+          curl -LO https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman
+          bash antman -S
+
+      - name: Integrate BakaSU (formerly ReSukiSU) + SUSFS
+        if: inputs.variant == 'bakasu_susfs'
+        run: |
+          cd kernel
+          # BakaSU driver ko kernel tree mein jodna
+          curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash -s main
+          # SUSFS kernel patches — 4.19 non-GKI branch (susfs4ksu)
+          git clone --depth=1 -b kernel-4.19 https://gitlab.com/simonpunk/susfs4ksu susfs4ksu
+          cp susfs4ksu/kernel_patches/fs/* fs/
+          cp susfs4ksu/kernel_patches/include/linux/* include/linux/
+          patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_kernel-4.19.patch || \
+            patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_kernel-4.19-*.patch
+
+      - name: Build kernel
+        run: |
+          cd kernel
+          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
+          export ARCH=arm64 SUBARCH=arm64
+          make O=out ARCH=arm64 CC=clang vendor/kona-perf_defconfig
+          ./scripts/kconfig/merge_config.sh -O out -m out/.config arch/arm64/configs/vendor/timelm.config
+          if [ "${{ inputs.variant }}" = "bakasu_susfs" ]; then
+            ./scripts/config --file out/.config \
+              -e KSU -e KSU_SUSFS -e KSU_SUSFS_SUS_PATH -e KSU_SUSFS_SUS_MOUNT \
+              -e KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT -e KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT \
+              -e KSU_SUSFS_SUS_KSTAT -e KSU_SUSFS_TRY_UMOUNT \
+              -e KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT -e KSU_SUSFS_SPOOF_UNAME \
+              -e KSU_SUSFS_ENABLE_LOG -e KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
+              -e KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG -e KSU_SUSFS_OPEN_REDIRECT
+          fi
+          make O=out ARCH=arm64 CC=clang olddefconfig
+          make O=out ARCH=arm64 CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm \
+            OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
+            CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            -j$(nproc --all) Image.gz dtbs modules
+
+      - name: Package AnyKernel3 zip
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3
+          cp kernel/out/arch/arm64/boot/Image.gz AnyKernel3/
+          DTB=$(ls kernel/out/arch/arm64/boot/dts/qcom/*kona*.dtb | head -1)
+          cp "$DTB" AnyKernel3/dtb
+          cd AnyKernel3
+          cat > anykernel.sh <<'EOF'
+          properties() { '
+          kernel.string=Kernel by Mukaram for LG V60 (timelm)
+          do.devicecheck=1
+          do.modules=0
+          do.systemless=1
+          do.cleanup=1
+          do.cleanuponabort=0
+          device.name1=timelm
+          device.name2=LG V60 ThinQ
+          supported.versions=
+          '; }
+          block=boot
+          is_slot_device=1
+          ramdisk_compression=auto
+          patch_vbmeta_flag=auto
+          . tools/ak3-core.sh
+          dump_boot
+          write_boot
+          EOF
+          zip -r9 ../Kernel-Mukaram-timelm.zip . -x "*.git*"
+
+      - name: Upload flashable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kernel-Mukaram-timelm
+          path: Kernel-Mukaram-timelm.zip
