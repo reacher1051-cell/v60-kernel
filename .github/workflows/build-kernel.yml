@@ -21,6 +21,9 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
+      - name: Checkout this repo (patch files ke liye)
+        uses: actions/checkout@v4
+
       - name: Free disk space
         uses: jlumbroso/free-disk-space@main
         with:
@@ -60,8 +63,24 @@ jobs:
           git clone --depth=1 -b kernel-4.19 https://gitlab.com/simonpunk/susfs4ksu susfs4ksu
           cp susfs4ksu/kernel_patches/fs/* fs/
           cp susfs4ksu/kernel_patches/include/linux/* include/linux/
-          patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_kernel-4.19.patch || \
-            patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_kernel-4.19-*.patch
+          # Asal SUSFS patch — Peter ki tree par kuch hisse nahi baithte,
+          # is liye pehle jo lag jaye lagne do (neeche fixups se pura hoga)
+          patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_kernel-4.19.patch || true
+          # fs/namespace.c is tree mein naye mount-API wali hai — usay saaf
+          # halat mein wapas lao, phir Mukaram ka hath se port kiya gaya
+          # mukammal namespace patch lagao (repo wali file se)
+          git checkout -- fs/namespace.c
+          find . -name "*.rej" -delete
+          find . -name "*.orig" -delete
+          patch -p1 < "$GITHUB_WORKSPACE/timelm_namespace_susfs.patch"
+          # Baqi 3 files (cmdline.c, task_mmu.c, mount.h) ke chhote fixups
+          patch -p1 < "$GITHUB_WORKSPACE/susfs_fixups.patch"
+          # Tasdeeq: koi hissa rehta nahi hona chahiye
+          if find . -name "*.rej" | grep -q .; then
+            echo "ERROR: kuch patch hisse lagne se reh gaye:"
+            find . -name "*.rej"
+            exit 1
+          fi
 
       - name: Build kernel
         run: |
