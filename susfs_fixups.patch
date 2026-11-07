@@ -1,0 +1,54 @@
+--- a/fs/proc/cmdline.c
++++ b/fs/proc/cmdline.c
+@@ -3,6 +3,9 @@
+ #include <linux/init.h>
+ #include <linux/proc_fs.h>
+ #include <linux/seq_file.h>
++#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
++extern int susfs_spoof_cmdline_or_bootconfig(struct seq_file *m);
++#endif
+ #include <asm/setup.h>
+ #include <soc/qcom/lge/board_lge.h>
+ #include <linux/slab.h>
+@@ -30,6 +33,12 @@
+ 
+ static int cmdline_proc_show(struct seq_file *m, void *v)
+ {
++#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
++	if (!susfs_spoof_cmdline_or_bootconfig(m)) {
++		seq_putc(m, '\n');
++		return 0;
++	}
++#endif
+ #ifdef CONFIG_MACH_LGE
+ 	if (lge_get_boot_mode() == LGE_BOOT_MODE_CHARGERLOGO) {
+ 		proc_cmdline_set("androidboot.mode", "charger");
+--- a/fs/proc/task_mmu.c
++++ b/fs/proc/task_mmu.c
+@@ -20,6 +20,9 @@
+ #include <linux/uaccess.h>
+ #include <linux/pkeys.h>
+ #include <linux/mm_inline.h>
++#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
++#include <linux/susfs_def.h>
++#endif
+ #include <linux/ctype.h>
+ 
+ #include <asm/elf.h>
+--- a/include/linux/mount.h
++++ b/include/linux/mount.h
+@@ -74,7 +74,14 @@
+ 	ANDROID_KABI_RESERVE(1);
+ 	ANDROID_KABI_RESERVE(2);
+ 	ANDROID_KABI_RESERVE(3);
++#ifdef CONFIG_KSU_SUSFS
++	ANDROID_KABI_USE(4, u64 susfs_mnt_id_backup);
++#else
+ 	ANDROID_KABI_RESERVE(4);
++#endif
++#if defined(CONFIG_KSU_SUSFS) && !defined(ANDROID_KABI_RESERVE)
++	u64 susfs_mnt_id_backup;
++#endif
+ } __randomize_layout;
+ 
+ struct file; /* forward dec */
